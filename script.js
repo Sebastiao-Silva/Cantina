@@ -15,18 +15,25 @@ function verificarLogin() {
         // Salva que você logou para não pedir senha de novo ao atualizar (F5)
         sessionStorage.setItem('autenticado', 'true');
         
-        // Chama a função que carrega os dados do Supabase
-       async function renderizarTudo() {
-    // 1. Busca os dados no Supabase (na nuvem)
+async function renderizarTudo() {
+    // O Supabase já busca os dados e te entrega um Objeto JSON pronto
     const { data, error } = await _supabase
-        .from('estoque') // Nome da tabela que você criou no painel
+        .from('estoque')
         .select('*');
 
-    // 2. Se der erro (como o 400 que estamos vendo), ele avisa no console
     if (error) {
         console.error('Erro ao buscar do Supabase:', error);
         return;
     }
+
+    // O 'data' aqui já é o seu JSON! 
+    // Agora você só precisa passar ele para a função que desenha na tela
+    if (data && data.length > 0) {
+        console.log("JSON carregado:", data);
+        // Exemplo: se sua função de desenho se chama 'atualizarTabela'
+        // atualizarTabela(data); 
+    }
+}
 
     // 3. Se funcionou, ele manda os dados para a função que desenha na tela
     // OBS: Verifique se o nome da sua função de desenho é 'exibirProdutos' ou similar
