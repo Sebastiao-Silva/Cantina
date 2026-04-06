@@ -65,25 +65,46 @@ function removerDoCarrinho(index) {
     renderVendas();
 }
 
-function finalizarVenda() {
-    if(db.carrinho.length === 0) return;
+async function finalizarVenda() {
+    if(!carrinho.length) return;
+    const t = carrinho.reduce((a,b)=>a+b.preco,0);
+    const pag = document.getElementById('sel-pagamento').value;
+    const pid = parseInt(document.getElementById('sel-pessoa').value);
+    
+    // Lógica de Data Retroativa
+    const dataInput = document.getElementById('data-retroativa').value;
+    const dataFinal = dataInput ? new Date(dataInput).toLocaleString() : new Date().toLocaleString();
 
-    // Baixa no estoque real
-    db.carrinho.forEach(itemNoCarrinho => {
-        const itemOriginal = db.estoque.find(i => i.id === itemNoCarrinho.id);
-        if(itemOriginal) itemOriginal.qtd -= 1;
+    const p = pid !== 0 ? await buscar("pessoas", pid) : {nome: "AVULSO", divida: 0};
+    
+    if(pag === 'FIADO' && pid === 0) return alert("Selecione um cliente para fiado!");
+
+    for(let it of carrinho) {
+        const prod = await buscar("estoque", it.id);
+        if(prod) { prod.qtd--; await salvar("estoque", prod); }
+    }
+
+    if(pag === 'FIADO') { p.divida += t; await salvar("pessoas", p); }
+
+    await salvar("historico", {
+        data: dataFinal,
+        total: t,
+        tipo: `${pag}: ${p.nome} (${carrinho.map(c=>c.sigla).join(',')})`,
+        clienteId: pid,
+        obs: document.getElementById('obs-venda').value
     });
-
-    // Soma ao total do dia
-    const totalVenda = db.carrinho.reduce((sum, item) => sum + item.preco, 0);
-    db.vendas_dia += totalVenda;
-
-    // Limpa carrinho e salva
-    db.carrinho = [];
-    salvarDB();
-    renderVendas();
-    alert("Venda realizada com sucesso!");
+    
+    somVenda.currentTime = 0;
+    somVenda.play().catch(e => console.log("Erro som"));
+    
+    // Limpeza
+    carrinho = []; 
+    document.getElementById('obs-venda').value=""; 
+    document.getElementById('data-retroativa').value=""; // Limpa a data após vender
+    renderizarTudo(); 
+    alert("Venda Finalizada!");
 }
+
 
 // INICIALIZAÇÃO
 window.onload = () => {
