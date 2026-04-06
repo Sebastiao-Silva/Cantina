@@ -16,9 +16,24 @@ function verificarLogin() {
         sessionStorage.setItem('autenticado', 'true');
         
         // Chama a função que carrega os dados do Supabase
-        if (typeof renderizarTudo === "function") {
-            renderizarTudo();
-        }
+       async function renderizarTudo() {
+    // 1. Busca os dados no Supabase (na nuvem)
+    const { data, error } = await _supabase
+        .from('estoque') // Nome da tabela que você criou no painel
+        .select('*');
+
+    // 2. Se der erro (como o 400 que estamos vendo), ele avisa no console
+    if (error) {
+        console.error('Erro ao buscar do Supabase:', error);
+        return;
+    }
+
+    // 3. Se funcionou, ele manda os dados para a função que desenha na tela
+    // OBS: Verifique se o nome da sua função de desenho é 'exibirProdutos' ou similar
+    if (typeof exibirProdutos === "function") {
+        exibirProdutos(data); 
+    }
+}
         
         console.log("Login realizado com sucesso no Bear Snack!");
     } else {
