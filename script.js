@@ -1,17 +1,10 @@
 // --- CONFIGURAÇÃO DE SEGURANÇA E CONEXÃO ---
 const SUPABASE_URL = "https://hrmjepcajzuvopmuctet.supabase.co";
-// ATENÇÃO: Substitua a string abaixo pela sua chave 'anon' 'public' que está no painel do Supabase
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhybWplcGNhanp1dm9wbXVjdGV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NDA5MjcsImV4cCI6MjA5MTAxNjkyN30.kDHHybmuJJiYCkzHpSOWayHF91TlFLG7Voe8uTdaMlM"; 
 
-// Inicializa o cliente do Supabase
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Caminho do seu arquivo JSON no Storage (Mantido para compatibilidade de backup)
-const BUCKET_NAME = 'BearSnack';
-const FILE_NAME = 'backup_bear (5).json';
-const URL_JSON_SUPABASE = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${FILE_NAME}`;
-
-// VARIÁVEL GLOBAL DO BANCO DE DATOS (Estado atual do sistema)
+// Variáveis globais para o estado do App
 let db_sessao = {
     estoque: [],
     pessoas: [],
@@ -21,7 +14,7 @@ let db_sessao = {
 
 let carrinho = [];
 
-// --- 1. FUNÇÃO DE LOGIN COM VALIDAÇÃO NO BANCO ---
+// --- 1. FUNÇÃO DE LOGIN COM VALIDAÇÃO ---
 async function verificarLogin() {
     const campoSenha = document.getElementById('senha-acesso');
     if (!campoSenha) return;
@@ -29,7 +22,6 @@ async function verificarLogin() {
     const senhaDigitada = campoSenha.value;
 
     try {
-        // Busca a senha na tabela 'configuracoes' que você criou
         const { data, error } = await _supabase
             .from('configuracoes')
             .select('valor')
@@ -39,16 +31,12 @@ async function verificarLogin() {
         if (error) throw new Error("Erro ao conectar com tabela de configurações.");
 
         if (data && senhaDigitada === data.valor) {
-            console.log("Login realizado com sucesso no Bear Snack!");
-            
-            // Libera o acesso visual
+            console.log("Login autorizado!");
             document.getElementById('tela-login').style.display = 'none';
             document.getElementById('main-app').style.display = 'block';
-            
-            // Salva a sessão para não pedir senha no F5
             sessionStorage.setItem('autenticado', 'true');
 
-            // Carrega os dados direto das tabelas do banco
+            // CHAMA A CARGA DOS DADOS DAS TABELAS
             await carregarDadosDaNuvem();
             
         } else {
@@ -59,17 +47,16 @@ async function verificarLogin() {
             campoSenha.focus();
         }
     } catch (err) {
-        console.error("Erro no processo de login:", err);
-        alert("Erro técnico ao validar acesso.");
+        console.error("Erro no login:", err);
     }
 }
 
-// --- 2. CARREGAR DADOS DAS TABELAS (CONEXÃO VIVA) ---
+// --- 2. CARREGAR DADOS DAS TABELAS (AQUI SUBSTITUÍMOS O JSON) ---
 async function carregarDadosDaNuvem() {
     try {
-        console.log("Sincronizando com as tabelas do Supabase...");
+        console.log("Buscando dados das tabelas do Supabase...");
 
-        // Busca todas as tabelas em paralelo para maior velocidade
+        // Buscamos as 3 tabelas que o seu JSON tinha, mas agora direto do banco
         const [resEstoque, resPessoas, resHistorico] = await Promise.all([
             _supabase.from('estoque').select('*').order('nome', { ascending: true }),
             _supabase.from('pessoas').select('*').order('nome', { ascending: true }),
@@ -80,51 +67,27 @@ async function carregarDadosDaNuvem() {
         if (resPessoas.error) throw resPessoas.error;
         if (resHistorico.error) throw resHistorico.error;
 
-        // Atualiza a variável global com os dados reais do banco
+        // Alimentamos a variável local com o que veio do banco
         db_sessao.estoque = resEstoque.data || [];
         db_sessao.pessoas = resPessoas.data || [];
         db_sessao.historico = resHistorico.data || [];
         
-        console.log("Dados sincronizados do banco:", db_sessao);
+        console.log("Dados carregados com sucesso!", db_sessao);
         
+        // Atualiza a tela
         renderizarTudo();
 
     } catch (erro) {
-        console.error("Erro ao carregar tabelas do banco:", erro);
-        alert("Erro ao sincronizar dados. Verifique a conexão com o banco de dados.");
+        console.error("Erro ao sincronizar tabelas:", erro);
+        alert("Erro ao carregar dados do banco de dados.");
     }
 }
 
-// --- 3. SALVAR BACKUP NO STORAGE (OPCIONAL/SEGURANÇA) ---
-async function salvarDadosNaNuvem() {
-    try {
-        console.log("Gerando backup no Storage...");
-        
-        const jsonString = JSON.stringify(db_sessao);
-        const blob = new Blob([jsonString], { type: 'application/json' });
-
-        const { data, error } = await _supabase.storage
-            .from(BUCKET_NAME)
-            .upload(FILE_NAME, blob, {
-                contentType: 'application/json',
-                upsert: true
-            });
-
-        if (error) throw error;
-        console.log("Backup em JSON atualizado no Storage.");
-
-    } catch (erro) {
-        console.error("Erro ao gerar backup no Storage:", erro);
-    }
-}
-
-// --- 4. RENDERIZAÇÃO DA INTERFACE ---
+// --- 3. RENDERIZAÇÃO DA INTERFACE ---
 function renderizarTudo() {
     renderVendas();
-    // Funções auxiliares para outras abas (se existirem)
-    if (typeof renderEstoque === "function") renderEstoque();
-    if (typeof renderClientes === "function") renderClientes();
-    console.log("Interface atualizada.");
+    renderListaPessoas(); // Garante que a lista de clientes/alunos apareça
+    console.log("Interface renderizada.");
 }
 
 function renderVendas() {
@@ -132,7 +95,7 @@ function renderVendas() {
     if (!listaEstoque) return;
 
     if (!db_sessao.estoque || db_sessao.estoque.length === 0) {
-        listaEstoque.innerHTML = "<tr><td colspan='3'>Estoque vazio ou não carregado.</td></tr>";
+        listaEstoque.innerHTML = "<tr><td colspan='3'>Estoque não encontrado no banco.</td></tr>";
         return;
     }
 
@@ -145,6 +108,17 @@ function renderVendas() {
     `).join('');
 
     renderCarrinho();
+}
+
+// Função para preencher o SELECT de pessoas (Clientes/Alunos)
+function renderListaPessoas() {
+    const selectPessoa = document.getElementById('sel-pessoa');
+    if (!selectPessoa) return;
+
+    selectPessoa.innerHTML = '<option value="">Selecione o Cliente/Aluno</option>' + 
+        db_sessao.pessoas.map(p => `
+            <option value="${p.id}">${p.nome} (${p.tipo})</option>
+        `).join('');
 }
 
 function adicionarAoCarrinho(id) {
@@ -180,7 +154,7 @@ function removerDoCarrinho(index) {
     renderCarrinho();
 }
 
-// --- 5. FINALIZAR VENDA E SINCRONIZAR BANCO ---
+// --- 4. FINALIZAR VENDA (ATUALIZA O BANCO NA HORA) ---
 async function finalizarVenda() {
     if (carrinho.length === 0) return alert("Carrinho vazio!");
 
@@ -189,7 +163,7 @@ async function finalizarVenda() {
     const clienteId = parseInt(document.getElementById('sel-pessoa').value);
 
     try {
-        // 1. Atualiza o estoque no banco (Tabela 'estoque')
+        // 1. Dá baixa no estoque no banco de dados
         for (let itemCarrinho of carrinho) {
             const { data: prod } = await _supabase
                 .from('estoque')
@@ -205,7 +179,7 @@ async function finalizarVenda() {
             }
         }
 
-        // 2. Registra no histórico do banco (Tabela 'historico')
+        // 2. Insere a venda no histórico do banco
         const novaVenda = {
             data: new Date().toLocaleString('pt-BR'),
             total: totalVenda,
@@ -216,23 +190,19 @@ async function finalizarVenda() {
 
         await _supabase.from('historico').insert([novaVenda]);
 
-        // 3. Limpa o carrinho e atualiza localmente
         carrinho = [];
-        alert("Venda Finalizada com Sucesso!");
+        alert("Venda Finalizada e Banco de Dados Atualizado!");
         
-        // Recarrega os dados do banco para garantir sincronia
+        // Recarrega tudo para mostrar os novos valores
         await carregarDadosDaNuvem();
-        
-        // Gera um backup em JSON no Storage por segurança
-        salvarDadosNaNuvem();
 
     } catch (err) {
         console.error("Erro ao finalizar venda:", err);
-        alert("Erro ao gravar venda no banco de dados.");
+        alert("Erro ao gravar venda no banco.");
     }
 }
 
-// --- 6. INICIALIZAÇÃO ---
+// --- 5. INICIALIZAÇÃO ---
 window.addEventListener('load', () => {
     const dataDisplay = document.getElementById('data-atual');
     if (dataDisplay) dataDisplay.innerText = new Date().toLocaleDateString('pt-br');
