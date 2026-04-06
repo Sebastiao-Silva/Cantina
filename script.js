@@ -1,4 +1,49 @@
-// BANCO DE DADOS
+// --- FUNÇÃO DE LOGIN (ADICIONE ISSO) ---
+function verificarLogin() {
+    // 1. Pega o que foi digitado no campo de senha
+    const campoSenha = document.getElementById('senha-acesso');
+    if (!campoSenha) return; // Segurança caso o ID esteja diferente
+
+    const senhaDigitada = campoSenha.value;
+
+    // 2. Compara com a sua senha 1234
+    if (senhaDigitada === SENHA_MESTRA) {
+        // Libera o acesso visual
+        document.getElementById('tela-login').style.display = 'none';
+        document.getElementById('main-app').style.display = 'block';
+        
+        // Salva que você logou para não pedir senha de novo ao atualizar (F5)
+        sessionStorage.setItem('autenticado', 'true');
+        
+        // Chama a função que carrega os dados do Supabase
+        if (typeof renderizarTudo === "function") {
+            renderizarTudo();
+        }
+        
+        console.log("Login realizado com sucesso no Bear Snack!");
+    } else {
+        // Se errar a senha
+        const erroMsg = document.getElementById('erro-login');
+        if (erroMsg) erroMsg.style.display = 'block';
+        campoSenha.value = "";
+        campoSenha.focus();
+    }
+}
+
+// --- AUTO-LOGIN (OPCIONAL, MAS RECOMENDADO) ---
+// Se você já logou, ele pula a tela de senha automaticamente ao abrir o app
+window.addEventListener('load', () => {
+    if (sessionStorage.getItem('autenticado') === 'true') {
+        const telaLogin = document.getElementById('tela-login');
+        const mainApp = document.getElementById('main-app');
+        
+        if (telaLogin && mainApp) {
+            telaLogin.style.display = 'none';
+            mainApp.style.display = 'block';
+            if (typeof renderizarTudo === "function") renderizarTudo();
+        }
+    }
+});// BANCO DE DADOS
 let db = JSON.parse(localStorage.getItem('bear_snack_db')) || {
     estoque: [
         { id: 1, nome: 'SALGADO ASSADO', qtd: 20, preco: 8.50 },
