@@ -16,23 +16,24 @@ function verificarLogin() {
         sessionStorage.setItem('autenticado', 'true');
         
 async function renderizarTudo() {
-    // O Supabase já busca os dados e te entrega um Objeto JSON pronto
+    // 1. O Supabase busca os dados e já traz em formato JSON
     const { data, error } = await _supabase
         .from('estoque')
         .select('*');
 
     if (error) {
-        console.error('Erro ao buscar do Supabase:', error);
+        console.error('Erro ao buscar dados:', error);
         return;
     }
 
-    // O 'data' aqui já é o seu JSON! 
-    // Agora você só precisa passar ele para a função que desenha na tela
-    if (data && data.length > 0) {
-        console.log("JSON carregado:", data);
-        // Exemplo: se sua função de desenho se chama 'atualizarTabela'
-        // atualizarTabela(data); 
+    // 2. O 'data' já é o seu JSON. 
+    // Basta enviar para a função que você já tem para mostrar na tela.
+    if (data) {
+        console.log("JSON recebido do Supabase:", data);
+        // Chame aqui a sua função existente, por exemplo:
+        // exibirProdutos(data); 
     }
+}
 }
 
     // 3. Se funcionou, ele manda os dados para a função que desenha na tela
