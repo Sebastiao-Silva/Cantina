@@ -139,3 +139,11 @@ function salvarNoBD(tabela, objeto) {
     const store = transaction.objectStore(tabela);
     store.put(objeto); 
 }
+<script>
+  // No seu arquivo JS
+  const supabaseUrl = 'SUA_URL_DO_PRINT'
+  const supabaseKey = 'SUA_CHAVE_ANON_DO_PASSO_1'
+  const _supabase = supabase.createClient(supabaseUrl, supabaseKey)
+
+  console.log("Sistema pronto para salvar dados com segurança!")
+</script>
