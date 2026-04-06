@@ -16,7 +16,7 @@ function verificarLogin() {
         sessionStorage.setItem('autenticado', 'true');
         
 async function carregarDadosAutomatico() {
-    const urlJSON = "SUA_URL_PUBLICA_DO_SUPABASE_AQUI";
+    const urlJSON = "https://hrmjepcajzuvopmuctet.supabase.co/storage/v1/object/public/BearSnack/backup_bear%20(5).json";
 
     try {
         const resposta = await fetch(urlJSON);
