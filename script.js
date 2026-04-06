@@ -1,8 +1,17 @@
-// --- CONFIGURAÇÕES GERAIS E SENHA ---
-const SENHA_MESTRA = "1234"; // Altere se necessário
-const URL_JSON_SUPABASE = "https://hrmjepcajzuvopmuctet.supabase.co/storage/v1/object/public/BearSnack/backup_bear%20(5).json";
+// --- CONFIGURAÇÃO DE SEGURANÇA E CONEXÃO ---
+const SUPABASE_URL = "https://hrmjepcajzuvopmuctet.supabase.co";
+// ATENÇÃO: Substitua a string abaixo pela sua chave 'anon' 'public' que está no painel do Supabase
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhybWplcGNhanp1dm9wbXVjdGV0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NDA5MjcsImV4cCI6MjA5MTAxNjkyN30.kDHHybmuJJiYCkzHpSOWayHF91TlFLG7Voe8uTdaMlM"; 
 
-// VARIÁVEL GLOBAL DO BANCO DE DATOS (Onde o JSON será carregado)
+// Inicializa o cliente do Supabase
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Caminho do seu arquivo JSON no Storage
+const BUCKET_NAME = 'BearSnack';
+const FILE_NAME = 'backup_bear (5).json';
+const URL_JSON_SUPABASE = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${FILE_NAME}`;
+
+// VARIÁVEL GLOBAL DO BANCO DE DATOS (Estado atual do sistema)
 let db_sessao = {
     estoque: [],
     pessoas: [],
@@ -10,81 +19,120 @@ let db_sessao = {
     config: {}
 };
 
-// --- 1. FUNÇÃO DE LOGIN E CARREGAMENTO AUTOMÁTICO ---
+let carrinho = [];
+
+// --- 1. FUNÇÃO DE LOGIN COM VALIDAÇÃO NO BANCO ---
 async function verificarLogin() {
     const campoSenha = document.getElementById('senha-acesso');
     if (!campoSenha) return;
 
     const senhaDigitada = campoSenha.value;
 
-    if (senhaDigitada === SENHA_MESTRA) {
-        console.log("Login realizado com sucesso no Bear Snack!");
-        
-        // Libera o acesso visual
-        document.getElementById('tela-login').style.display = 'none';
-        document.getElementById('main-app').style.display = 'block';
-        
-        // Salva a sessão para não pedir senha no F5
-        sessionStorage.setItem('autenticado', 'true');
+    try {
+        // Busca a senha na tabela 'configuracoes' que você criou
+        const { data, error } = await _supabase
+            .from('configuracoes')
+            .select('valor')
+            .eq('chave', 'senha_mestre')
+            .single();
 
-        // CHAMA O CARREGAMENTO AUTOMÁTICO DO JSON NA NUVEM
-        await carregarDadosDaNuvem();
-        
-    } else {
-        const erroMsg = document.getElementById('erro-login');
-        if (erroMsg) erroMsg.style.display = 'block';
-        campoSenha.value = "";
-        campoSenha.focus();
+        if (error) throw new Error("Erro ao conectar com tabela de configurações.");
+
+        if (data && senhaDigitada === data.valor) {
+            console.log("Login realizado com sucesso no Bear Snack!");
+            
+            // Libera o acesso visual
+            document.getElementById('tela-login').style.display = 'none';
+            document.getElementById('main-app').style.display = 'block';
+            
+            // Salva a sessão para não pedir senha no F5
+            sessionStorage.setItem('autenticado', 'true');
+
+            // Carrega os dados do arquivo JSON
+            await carregarDadosDaNuvem();
+            
+        } else {
+            const erroMsg = document.getElementById('erro-login');
+            if (erroMsg) erroMsg.style.display = 'block';
+            alert("Senha incorreta!");
+            campoSenha.value = "";
+            campoSenha.focus();
+        }
+    } catch (err) {
+        console.error("Erro no processo de login:", err);
+        alert("Erro técnico ao validar acesso.");
     }
 }
 
-// --- 2. FUNÇÃO "LIMPA" PARA PUXAR O JSON COMPLETO ---
+// --- 2. CARREGAR JSON DO STORAGE (IMPORTAR) ---
 async function carregarDadosDaNuvem() {
     try {
-        console.log("Conectando ao Supabase Storage...");
-        const resposta = await fetch(URL_JSON_SUPABASE);
+        console.log("Baixando banco de dados do Storage...");
+        // Adicionamos um timestamp para evitar que o navegador use uma versão antiga (cache)
+        const resposta = await fetch(`${URL_JSON_SUPABASE}?t=${new Date().getTime()}`);
         
-        if (!resposta.ok) throw new Error("Não foi possível acessar o arquivo JSON");
+        if (!resposta.ok) throw new Error("Arquivo JSON não encontrado no Storage.");
 
         const dadosCompletos = await resposta.json();
         
-        // Alimenta a nossa variável global com TUDO (estoque, pessoas, etc)
+        // Atualiza a variável global
         db_sessao = dadosCompletos;
         
-        console.log("Banco de dados Bear Snack carregado com sucesso!", db_sessao);
+        console.log("Dados carregados:", db_sessao);
         
-        // Atualiza a interface do site com os dados novos
         renderizarTudo();
 
     } catch (erro) {
-        console.error("Erro crítico ao carregar JSON:", erro);
-        alert("Erro ao carregar banco de dados da nuvem. Verifique a conexão.");
+        console.error("Erro ao carregar JSON:", erro);
+        alert("Atenção: O sistema não conseguiu carregar o arquivo de backup da nuvem.");
     }
 }
 
-// --- 3. RENDERIZAÇÃO GERAL DA INTERFACE ---
-function renderizarTudo() {
-    // Esta função centraliza a atualização de todas as abas
-    renderVendas();
-    
-    // Se você tiver funções para outras abas, chame-as aqui:
-    // if (typeof renderEstoque === "function") renderEstoque();
-    // if (typeof renderClientes === "function") renderClientes();
-    
-    console.log("Interface atualizada com dados do JSON.");
+// --- 3. SALVAR JSON NO STORAGE (EXPORTAR/SOBRESCREVER) ---
+async function salvarDadosNaNuvem() {
+    try {
+        console.log("Salvando alterações na nuvem...");
+        
+        // Converte o objeto global de volta para texto JSON
+        const jsonString = JSON.stringify(db_sessao);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+
+        // Faz o upload para o Storage com 'upsert: true' para substituir o arquivo antigo
+        const { data, error } = await _supabase.storage
+            .from(BUCKET_NAME)
+            .upload(FILE_NAME, blob, {
+                contentType: 'application/json',
+                upsert: true
+            });
+
+        if (error) throw error;
+        console.log("Backup atualizado com sucesso!");
+
+    } catch (erro) {
+        console.error("Erro ao salvar na nuvem:", erro);
+        alert("Erro ao sincronizar os dados. As alterações foram feitas apenas localmente.");
+    }
 }
 
-// --- 4. LÓGICA DE VENDAS (ADAPTADA PARA O SEU JSON) ---
-let carrinho = [];
+// --- 4. RENDERIZAÇÃO DA INTERFACE ---
+function renderizarTudo() {
+    renderVendas();
+    // Aqui você pode adicionar outras funções de renderização conforme necessário
+    console.log("Interface atualizada.");
+}
 
 function renderVendas() {
     const listaEstoque = document.getElementById('lista-venda-estoque');
     if (!listaEstoque) return;
 
-    // Usa os dados que vieram do JSON (db_sessao.estoque)
+    if (!db_sessao.estoque || db_sessao.estoque.length === 0) {
+        listaEstoque.innerHTML = "<tr><td colspan='3'>Estoque vazio ou não carregado.</td></tr>";
+        return;
+    }
+
     listaEstoque.innerHTML = db_sessao.estoque.map(item => `
         <tr>
-            <td>${item.nome} <br><small style="color:gray">Qtd: ${item.qtd}</small></td>
+            <td>${item.nome} <br><small style="color:gray">Qtd: ${item.qtd} | ${item.sigla || ''}</small></td>
             <td>R$ ${item.preco.toFixed(2)}</td>
             <td><button class="btn btn-primary" onclick="adicionarAoCarrinho(${item.id})">+</button></td>
         </tr>
@@ -99,7 +147,7 @@ function adicionarAoCarrinho(id) {
         carrinho.push({ ...item });
         renderCarrinho();
     } else {
-        alert("Produto esgotado ou não encontrado!");
+        alert("Produto esgotado!");
     }
 }
 
@@ -126,7 +174,7 @@ function removerDoCarrinho(index) {
     renderCarrinho();
 }
 
-// --- 5. FINALIZAR VENDA E ATUALIZAR O BANCO ---
+// --- 5. FINALIZAR VENDA E SINCRONIZAR ---
 async function finalizarVenda() {
     if (carrinho.length === 0) return alert("Carrinho vazio!");
 
@@ -134,7 +182,7 @@ async function finalizarVenda() {
     const tipoPagamento = document.getElementById('sel-pagamento').value;
     const clienteId = parseInt(document.getElementById('sel-pessoa').value);
 
-    // 1. Atualiza o estoque na memória (db_sessao)
+    // 1. Atualiza o estoque na memória local
     for (let itemCarrinho of carrinho) {
         const produtoNoEstoque = db_sessao.estoque.find(p => p.id === itemCarrinho.id);
         if (produtoNoEstoque) {
@@ -142,9 +190,9 @@ async function finalizarVenda() {
         }
     }
 
-    // 2. Registra no histórico (db_sessao.historico ou vendas)
+    // 2. Registra no histórico global
     const novaVenda = {
-        data: new Date().toLocaleString(),
+        data: new Date().toLocaleString('pt-BR'),
         total: totalVenda,
         tipo: tipoPagamento,
         clienteId: clienteId,
@@ -154,22 +202,21 @@ async function finalizarVenda() {
     if (!db_sessao.historico) db_sessao.historico = [];
     db_sessao.historico.push(novaVenda);
 
-    // 3. Limpeza
+    // 3. Limpa o carrinho
     carrinho = [];
-    alert("Venda realizada com sucesso!");
     
-    // 4. ATENÇÃO: Aqui você chamaria a função para salvar de volta no Storage
-    // Por enquanto, renderizamos a tela com os novos valores
+    // 4. Salva o novo estado do JSON na nuvem (Sobrescreve o arquivo)
+    await salvarDadosNaNuvem();
+
+    alert("Venda Finalizada e Nuvem Atualizada!");
     renderizarTudo();
 }
 
-// --- 6. AUTO-LOGIN E INICIALIZAÇÃO AO CARREGAR PÁGINA ---
+// --- 6. INICIALIZAÇÃO ---
 window.addEventListener('load', () => {
-    // Exibe a data atual no topo
     const dataDisplay = document.getElementById('data-atual');
     if (dataDisplay) dataDisplay.innerText = new Date().toLocaleDateString('pt-br');
 
-    // Verifica se já estava logado
     if (sessionStorage.getItem('autenticado') === 'true') {
         const telaLogin = document.getElementById('tela-login');
         const mainApp = document.getElementById('main-app');
@@ -177,12 +224,11 @@ window.addEventListener('load', () => {
         if (telaLogin && mainApp) {
             telaLogin.style.display = 'none';
             mainApp.style.display = 'block';
-            carregarDadosDaNuvem(); // Carrega o JSON automaticamente
+            carregarDadosDaNuvem(); 
         }
     }
 });
 
-// --- FUNÇÃO AUXILIAR DE NAVEGAÇÃO ---
 function mudarAba(id, elemento) {
     document.querySelectorAll('.aba').forEach(a => a.classList.remove('active'));
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
@@ -192,6 +238,5 @@ function mudarAba(id, elemento) {
         abaAlvo.classList.add('active');
         elemento.classList.add('active');
     }
-    
-    renderizarTudo(); // Re-renderiza para garantir dados atualizados
+    renderizarTudo();
 }
