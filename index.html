@@ -95,11 +95,72 @@
         .btn-filtro { flex: 1; padding: 8px; font-size: 0.7rem; background: #334155; color: white; border: 1px solid transparent; border-radius: 8px; cursor: pointer; font-weight: bold; }
         .btn-filtro.active { background: var(--accent); color: #000; border-color: white; }
 
+        /* Estilos para a aba Gerente */
+        .relatorio-box {
+            background: var(--card);
+            border-radius: 12px;
+            margin: 10px;
+            padding: 15px;
+            border: 1px solid var(--accent);
+        }
+        .relatorio-box h3 {
+            color: var(--accent);
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 8px;
+        }
+        .filtros-data {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        .filtros-data input {
+            flex: 1;
+            min-width: 120px;
+        }
+        .btn-relatorio {
+            background: var(--info);
+            color: white;
+            margin-top: 10px;
+        }
+        .relatorio-resultado {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .relatorio-resultado table {
+            font-size: 0.75rem;
+        }
+        .relatorio-resultado th, .relatorio-resultado td {
+            padding: 8px;
+        }
+        .total-relatorio {
+            background: #020617;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            text-align: right;
+            font-weight: bold;
+            color: var(--accent);
+        }
+        .btn-print {
+            background: var(--accent);
+            color: #000;
+            margin-top: 10px;
+        }
+
         @media print {
             body * { visibility: hidden; }
             #modal-extrato, #modal-extrato * { visibility: visible; }
             #modal-extrato { position: absolute; left: 0; top: 0; width: 100%; background: white; color: black; padding: 0; }
             .btn, .no-print { display: none !important; }
+            .relatorio-resultado, .relatorio-box { visibility: visible; }
         }
     </style>
 </head>
@@ -112,6 +173,18 @@
             <input type="password" id="senha-acesso" placeholder="Senha do Sistema" style="text-align: center; font-size: 1.2rem;">
             <button class="btn btn-pago" style="width: 100%; margin-top: 15px;" onclick="verificarLogin()">ENTRAR</button>
             <p id="erro-login" style="color: var(--danger); font-size: 0.8rem; margin-top: 10px; display: none;">Senha incorreta!</p>
+        </div>
+    </div>
+
+    <!-- Tela de Login do Gerente -->
+    <div id="tela-login-gerente" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 10000; flex-direction: column; align-items: center; justify-content: center; padding: 20px;">
+        <div class="login-box">
+            <img src="logo.png" alt="Bear Snack">
+            <h2>Acesso Gerente</h2>
+            <input type="password" id="senha-gerente" placeholder="Senha do Gerente" style="text-align: center; font-size: 1.2rem;">
+            <button class="btn btn-pago" style="width: 100%; margin-top: 15px;" onclick="verificarLoginGerente()">ENTRAR</button>
+            <button class="btn" style="width: 100%; margin-top: 10px; background: #334155;" onclick="fecharLoginGerente()">VOLTAR</button>
+            <p id="erro-login-gerente" style="color: var(--danger); font-size: 0.8rem; margin-top: 10px; display: none;">Senha incorreta!</p>
         </div>
     </div>
 
@@ -130,6 +203,7 @@
             <a href="#" class="nav-link" onclick="ir('estoque', this)"><i class="fas fa-boxes"></i>Estoque</a>
             <a href="#" class="nav-link" onclick="ir('clientes', this)"><i class="fas fa-users"></i>Clientes</a>
             <a href="#" class="nav-link" onclick="ir('historico', this)"><i class="fas fa-list-alt"></i>Histórico</a>
+            <a href="#" class="nav-link" onclick="abrirGerente()"><i class="fas fa-chart-line"></i>Gerente</a>
         </nav>
 
         <main>
@@ -218,8 +292,62 @@
                     </table>
                 </div>
             </div>
+
+            <!-- ABA GERENTE - NOVA -->
+            <div id="aba-gerente" class="aba">
+                <div class="sticky-top">
+                    <div class="search-container">
+                        <h3 style="color: var(--accent); margin: 10px; font-size: 1rem;">📊 RELATÓRIOS GERENCIAIS</h3>
+                    </div>
+                </div>
+
+                <!-- Relatório Individual por Cliente -->
+                <div class="relatorio-box">
+                    <h3><i class="fas fa-user"></i> RELATÓRIO INDIVIDUAL</h3>
+                    <select id="rel-cliente-select" style="margin-bottom: 10px;">
+                        <option value="">Selecione um cliente...</option>
+                    </select>
+                    <button class="btn btn-relatorio" onclick="gerarRelatorioIndividual()" style="width: 100%;">GERAR RELATÓRIO COMPLETO</button>
+                    <div id="relatorio-individual-resultado" class="relatorio-resultado" style="display: none;"></div>
+                </div>
+
+                <!-- Relatório Geral por Período -->
+                <div class="relatorio-box">
+                    <h3><i class="fas fa-calendar-alt"></i> RELATÓRIO GERAL POR PERÍODO</h3>
+                    <div class="filtros-data">
+                        <input type="datetime-local" id="rel-data-inicio" placeholder="Data Início">
+                        <input type="datetime-local" id="rel-data-fim" placeholder="Data Fim">
+                    </div>
+                    <div class="filtros-data">
+                        <select id="rel-tipo-operacao" style="flex: 1;">
+                            <option value="TODOS">TODAS AS OPERAÇÕES</option>
+                            <option value="DINHEIRO">DINHEIRO</option>
+                            <option value="PIX">PIX</option>
+                            <option value="DEBITO">DÉBITO</option>
+                            <option value="CREDITO">CRÉDITO</option>
+                            <option value="FIADO">FIADO</option>
+                            <option value="PAGAMENTO">PAGAMENTO</option>
+                            <option value="BANDEJA">BANDEJA</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-relatorio" onclick="gerarRelatorioGeral()" style="width: 100%;">GERAR RELATÓRIO GERAL</button>
+                    <div id="relatorio-geral-resultado" class="relatorio-resultado" style="display: none;"></div>
+                </div>
+
+                <!-- Resumo Financeiro -->
+                <div class="relatorio-box">
+                    <h3><i class="fas fa-chart-pie"></i> RESUMO FINANCEIRO</h3>
+                    <div id="resumo-financeiro" style="padding: 10px;">
+                        <p>Carregando...</p>
+                    </div>
+                    <button class="btn btn-print" onclick="imprimirRelatorioAtual()" style="width: 100%; margin-top: 10px;">
+                        <i class="fas fa-print"></i> IMPRIMIR RELATÓRIO
+                    </button>
+                </div>
+            </div>
         </main>
 
+        <!-- Modais existentes (mantidos) -->
         <div id="modal-historico" class="overlay">
             <h2>Editar Registro Histórico</h2>
             <input type="hidden" id="edit-h-id">
@@ -302,21 +430,31 @@
 
     <script>
         const SENHA_MESTRA = "1234";
+        const SENHA_GERENTE = "admin123";
         let filtroBanAtual = 'TODOS';
+        let relatorioAtualHTML = "";
 
         const somVenda = new Audio('https://assets.mixkit.co/active_storage/sfx/2017/2017-preview.mp3');
         const somCaixa = new Audio('https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3');
 
-        // Função Robusta para converter string brasileira DD/MM/AAAA HH:MM:SS para Date real
         function parseDataBR(str) {
             if(!str) return new Date(0);
             try {
                 const parts = str.split(' ');
                 const dateParts = parts[0].split('/');
                 const timeParts = parts[1] ? parts[1].split(':') : ["00", "00", "00"];
-                // New Date(ano, mes-1, dia, hora, min, seg)
                 return new Date(dateParts[2], dateParts[1] - 1, dateParts[0], timeParts[0], timeParts[1], timeParts[2] || 0);
             } catch(e) { return new Date(0); }
+        }
+
+        function formatarDataHoraParaInput(dataStr) {
+            if(!dataStr) return "";
+            try {
+                const d = parseDataBR(dataStr);
+                if(d.toString() === "Invalid Date") return "";
+                d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+                return d.toISOString().slice(0, 16);
+            } catch(e) { return ""; }
         }
 
         function atualizarDataAtualPDV() {
@@ -339,6 +477,323 @@
             }
         }
 
+        // Funções da aba Gerente
+        function abrirGerente() {
+            document.getElementById('tela-login-gerente').style.display = 'flex';
+        }
+
+        function fecharLoginGerente() {
+            document.getElementById('tela-login-gerente').style.display = 'none';
+        }
+
+        function verificarLoginGerente() {
+            const senhaDigitada = document.getElementById('senha-gerente').value;
+            if(senhaDigitada === SENHA_GERENTE) {
+                document.getElementById('tela-login-gerente').style.display = 'none';
+                // Ativar a aba gerente
+                document.querySelectorAll('.aba').forEach(a => a.classList.remove('active'));
+                document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+                document.getElementById('aba-gerente').classList.add('active');
+                // Encontrar o link do gerente e marcar como ativo
+                const links = document.querySelectorAll('.nav-link');
+                for(let link of links) {
+                    if(link.querySelector('i').classList.contains('fa-chart-line')) {
+                        link.classList.add('active');
+                        break;
+                    }
+                }
+                carregarClientesNoSelect();
+                carregarResumoFinanceiro();
+                window.scrollTo(0, 0);
+            } else {
+                document.getElementById('erro-login-gerente').style.display = 'block';
+                document.getElementById('senha-gerente').value = "";
+            }
+        }
+
+        async function carregarClientesNoSelect() {
+            const pessa = await listar("pessoas");
+            const select = document.getElementById('rel-cliente-select');
+            select.innerHTML = '<option value="">Selecione um cliente...</option>';
+            pessa.sort((a, b) => a.nome.localeCompare(b.nome));
+            for(let p of pessa) {
+                select.innerHTML += `<option value="${p.id}">${p.nome} (${p.tipo || 'CLIENTE'}) - Saldo: R$ ${(-p.divida).toFixed(2)}</option>`;
+            }
+        }
+
+        async function gerarRelatorioIndividual() {
+            const clienteId = parseInt(document.getElementById('rel-cliente-select').value);
+            if(!clienteId) {
+                alert("Selecione um cliente!");
+                return;
+            }
+            
+            const p = await buscar("pessoas", clienteId);
+            const hists = await listar("historico");
+            const consumos = hists.filter(h => h.clienteId === clienteId);
+            
+            // Ordenar por data da mais recente para a mais antiga
+            consumos.sort((a, b) => parseDataBR(b.data) - parseDataBR(a.data));
+            
+            let html = `
+                <div style="text-align: center; margin-bottom: 15px;">
+                    <h3 style="color: var(--accent); margin: 0;">BEAR SNACK</h3>
+                    <h4>RELATÓRIO COMPLETO - ${p.nome}</h4>
+                    <p><strong>Telefone:</strong> ${p.tel || 'Não informado'} | <strong>Período:</strong> ${p.periodo || 'N/A'}</p>
+                    <p><strong>Documento:</strong> ${p.doc || 'Não informado'} | <strong>Tipo:</strong> ${p.tipo || 'CLIENTE'}</p>
+                    <hr>
+                </div>
+                <table style="width: 100%; font-size: 0.7rem;">
+                    <thead>
+                        <tr style="background: #1e293b;">
+                            <th>DATA/HORA</th>
+                            <th>TIPO DE OPERAÇÃO</th>
+                            <th>DESCRIÇÃO DETALHADA</th>
+                            <th>VALOR (R$)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            let totalGeral = 0;
+            for(let c of consumos) {
+                let tipoOp = c.tipo.split(':')[0];
+                let descricao = c.tipo;
+                let valor = c.total;
+                
+                if(tipoOp === 'PAGAMENTO') {
+                    totalGeral -= valor;
+                    html += `<tr style="color: #10b981;">`;
+                } else if(tipoOp === 'CREDITO') {
+                    totalGeral -= valor;
+                    html += `<tr style="color: #3b82f6;">`;
+                } else {
+                    totalGeral += valor;
+                    html += `<tr>`;
+                }
+                
+                html += `
+                    <td><small>${c.data}</small></td>
+                    <td><strong>${tipoOp}</strong></td>
+                    <td><small>${descricao}</small></td>
+                    <td align="right"><strong>R$ ${valor.toFixed(2)}</strong></td>
+                </tr>`;
+            }
+            
+            html += `
+                    </tbody>
+                </table>
+                <div class="total-relatorio">
+                    <strong>SALDO TOTAL DO CLIENTE: R$ ${totalGeral.toFixed(2)}</strong>
+                </div>
+                <div style="margin-top: 10px; font-size: 0.7rem; text-align: center; color: #666;">
+                    Relatório gerado em ${new Date().toLocaleString('pt-BR')}
+                </div>
+            `;
+            
+            const resultadoDiv = document.getElementById('relatorio-individual-resultado');
+            resultadoDiv.innerHTML = html;
+            resultadoDiv.style.display = 'block';
+            relatorioAtualHTML = html;
+        }
+
+        async function gerarRelatorioGeral() {
+            let dataInicio = document.getElementById('rel-data-inicio').value;
+            let dataFim = document.getElementById('rel-data-fim').value;
+            const tipoOp = document.getElementById('rel-tipo-operacao').value;
+            
+            let hists = await listar("historico");
+            
+            // Filtrar por período
+            if(dataInicio || dataFim) {
+                hists = hists.filter(h => {
+                    const dataH = parseDataBR(h.data);
+                    if(dataInicio && parseDataBR(dataInicio.replace('T', ' ')) > dataH) return false;
+                    if(dataFim) {
+                        const dataFimObj = parseDataBR(dataFim.replace('T', ' '));
+                        dataFimObj.setHours(23, 59, 59);
+                        if(dataFimObj < dataH) return false;
+                    }
+                    return true;
+                });
+            }
+            
+            // Filtrar por tipo de operação
+            if(tipoOp !== 'TODOS') {
+                hists = hists.filter(h => h.tipo.startsWith(tipoOp));
+            }
+            
+            // Ordenar por data da mais recente para a mais antiga
+            hists.sort((a, b) => parseDataBR(b.data) - parseDataBR(a.data));
+            
+            let html = `
+                <div style="text-align: center; margin-bottom: 15px;">
+                    <h3 style="color: var(--accent); margin: 0;">BEAR SNACK</h3>
+                    <h4>RELATÓRIO GERAL</h4>
+                    <p><strong>Período:</strong> ${dataInicio ? new Date(dataInicio).toLocaleString('pt-BR') : 'INÍCIO'} até ${dataFim ? new Date(dataFim).toLocaleString('pt-BR') : 'FIM'}</p>
+                    <p><strong>Tipo de Operação:</strong> ${tipoOp}</p>
+                    <hr>
+                </div>
+                <table style="width: 100%; font-size: 0.7rem;">
+                    <thead>
+                        <tr style="background: #1e293b;">
+                            <th>DATA/HORA</th>
+                            <th>CLIENTE</th>
+                            <th>TIPO DE OPERAÇÃO</th>
+                            <th>DESCRIÇÃO</th>
+                            <th>VALOR (R$)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            let totalEntradas = 0;
+            let totalSaidas = 0;
+            
+            for(let h of hists) {
+                let tipoOpItem = h.tipo.split(':')[0];
+                let cliente = "AVULSO";
+                if(h.clienteId) {
+                    const p = await buscar("pessoas", h.clienteId);
+                    if(p) cliente = p.nome;
+                }
+                
+                if(tipoOpItem === 'PAGAMENTO' || tipoOpItem === 'CREDITO') {
+                    totalSaidas += h.total;
+                    html += `<tr style="color: #10b981;">`;
+                } else {
+                    totalEntradas += h.total;
+                    html += `<tr>`;
+                }
+                
+                html += `
+                    <td><small>${h.data}</small></td>
+                    <td><strong>${cliente}</strong></td>
+                    <td>${tipoOpItem}</td>
+                    <td><small>${h.tipo}</small></td>
+                    <td align="right"><strong>R$ ${h.total.toFixed(2)}</strong></td>
+                </tr>`;
+            }
+            
+            html += `
+                    </tbody>
+                </table>
+                <div class="total-relatorio">
+                    <div><strong>TOTAL DE VENDAS (Entradas): R$ ${totalEntradas.toFixed(2)}</strong></div>
+                    <div><strong>TOTAL DE PAGAMENTOS (Saídas): R$ ${totalSaidas.toFixed(2)}</strong></div>
+                    <div><strong>SALDO LÍQUIDO: R$ ${(totalEntradas - totalSaidas).toFixed(2)}</strong></div>
+                </div>
+                <div style="margin-top: 10px; font-size: 0.7rem; text-align: center; color: #666;">
+                    Total de registros: ${hists.length} | Relatório gerado em ${new Date().toLocaleString('pt-BR')}
+                </div>
+            `;
+            
+            const resultadoDiv = document.getElementById('relatorio-geral-resultado');
+            resultadoDiv.innerHTML = html;
+            resultadoDiv.style.display = 'block';
+            relatorioAtualHTML = html;
+        }
+
+        async function carregarResumoFinanceiro() {
+            const hists = await listar("historico");
+            const pessoas = await listar("pessoas");
+            
+            let totalVendas = 0;
+            let totalPagamentos = 0;
+            let totalFiado = 0;
+            let totalPix = 0;
+            let totalDinheiro = 0;
+            let totalDebito = 0;
+            let totalCredito = 0;
+            let totalBandeja = 0;
+            
+            for(let h of hists) {
+                let tipo = h.tipo.split(':')[0];
+                if(tipo === 'PAGAMENTO' || tipo === 'CREDITO') {
+                    totalPagamentos += h.total;
+                } else {
+                    totalVendas += h.total;
+                }
+                
+                if(tipo === 'FIADO') totalFiado += h.total;
+                if(tipo === 'PIX') totalPix += h.total;
+                if(tipo === 'DINHEIRO') totalDinheiro += h.total;
+                if(tipo === 'DEBITO') totalDebito += h.total;
+                if(tipo === 'CREDITO' && !h.tipo.includes('PAGAMENTO')) totalCredito += h.total;
+                if(tipo === 'BANDEJA') totalBandeja += h.total;
+            }
+            
+            let totalDividasClientes = 0;
+            for(let p of pessoas) {
+                if(p.divida > 0) totalDividasClientes += p.divida;
+            }
+            
+            const html = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div style="background: #020617; padding: 10px; border-radius: 8px;">
+                        <small>TOTAL VENDAS</small>
+                        <h3 style="color: var(--success); margin: 5px 0;">R$ ${totalVendas.toFixed(2)}</h3>
+                    </div>
+                    <div style="background: #020617; padding: 10px; border-radius: 8px;">
+                        <small>TOTAL PAGAMENTOS</small>
+                        <h3 style="color: var(--info); margin: 5px 0;">R$ ${totalPagamentos.toFixed(2)}</h3>
+                    </div>
+                    <div style="background: #020617; padding: 10px; border-radius: 8px;">
+                        <small>SALDO LÍQUIDO</small>
+                        <h3 style="color: var(--accent); margin: 5px 0;">R$ ${(totalVendas - totalPagamentos).toFixed(2)}</h3>
+                    </div>
+                    <div style="background: #020617; padding: 10px; border-radius: 8px;">
+                        <small>TOTAL DÍVIDAS CLIENTES</small>
+                        <h3 style="color: var(--danger); margin: 5px 0;">R$ ${totalDividasClientes.toFixed(2)}</h3>
+                    </div>
+                </div>
+                <hr style="border-color: #334155; margin: 15px 0;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.75rem;">
+                    <div>💵 DINHEIRO: <strong>R$ ${totalDinheiro.toFixed(2)}</strong></div>
+                    <div>💎 PIX: <strong>R$ ${totalPix.toFixed(2)}</strong></div>
+                    <div>💳 DÉBITO: <strong>R$ ${totalDebito.toFixed(2)}</strong></div>
+                    <div>💳 CRÉDITO: <strong>R$ ${totalCredito.toFixed(2)}</strong></div>
+                    <div>📝 FIADO: <strong>R$ ${totalFiado.toFixed(2)}</strong></div>
+                    <div>🍽️ BANDEJA: <strong>R$ ${totalBandeja.toFixed(2)}</strong></div>
+                </div>
+            `;
+            
+            document.getElementById('resumo-financeiro').innerHTML = html;
+        }
+
+        function imprimirRelatorioAtual() {
+            if(!relatorioAtualHTML) {
+                alert("Nenhum relatório gerado para imprimir!");
+                return;
+            }
+            
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>Bear Snack - Relatório</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        table { width: 100%; border-collapse: collapse; }
+                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                        th { background: #f5f5f5; }
+                        .total-relatorio { margin-top: 20px; padding: 10px; background: #f0f0f0; text-align: right; font-weight: bold; }
+                        @media print {
+                            body { margin: 0; }
+                            button { display: none; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${relatorioAtualHTML}
+                    <button onclick="window.print()" style="margin-top: 20px; padding: 10px;">IMPRIMIR</button>
+                    <button onclick="window.close()" style="margin-top: 20px; padding: 10px;">FECHAR</button>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        }
+
         if(sessionStorage.getItem('autenticado') === 'true') {
             document.getElementById('tela-login').style.display = 'none';
             document.getElementById('main-app').style.display = 'block';
@@ -346,16 +801,31 @@
         }
 
         let db;
-        const req = indexedDB.open("BearSnackFinalDB", 1);
+        const req = indexedDB.open("BearSnackFinalDB", 2);
 
         req.onupgradeneeded = (e) => {
             db = e.target.result;
-            db.createObjectStore("estoque", { keyPath: "id", autoIncrement: true });
-            db.createObjectStore("pessoas", { keyPath: "id", autoIncrement: true });
-            db.createObjectStore("historico", { keyPath: "id", autoIncrement: true });
+            const oldVersion = e.oldVersion;
+            
+            if (!db.objectStoreNames.contains("estoque")) {
+                db.createObjectStore("estoque", { keyPath: "id", autoIncrement: true });
+            }
+            if (!db.objectStoreNames.contains("pessoas")) {
+                db.createObjectStore("pessoas", { keyPath: "id", autoIncrement: true });
+            }
+            if (!db.objectStoreNames.contains("historico")) {
+                db.createObjectStore("historico", { keyPath: "id", autoIncrement: true });
+            }
         };
 
-        req.onsuccess = (e) => { db = e.target.result; if(sessionStorage.getItem('autenticado') === 'true') renderizarTudo(); };
+        req.onsuccess = (e) => { 
+            db = e.target.result; 
+            if(sessionStorage.getItem('autenticado') === 'true') {
+                renderizarTudo();
+                carregarResumoFinanceiro();
+            }
+        };
+        req.onerror = (e) => console.error("Erro no IndexedDB:", e);
 
         let carrinho = [];
         let clienteFichaId = null;
@@ -402,11 +872,16 @@
                 return matchesSearch && matchesPeriodo;
             });
 
-            // Filtro e Ordenação do Histórico (MAIS RECENTE NO TOPO - COMO DESEJADO)
             const termoHist = document.getElementById('busca-historico') ? document.getElementById('busca-historico').value.toUpperCase() : "";
-            const histsOrdenados = hists.filter(h => {
+            const histsFiltrados = hists.filter(h => {
                 return h.tipo.toUpperCase().includes(termoHist) || (h.obs && h.obs.toUpperCase().includes(termoHist)) || h.data.includes(termoHist);
-            }).sort((a, b) => parseDataBR(b.data) - parseDataBR(a.data));
+            });
+            
+            histsFiltrados.sort((a, b) => {
+                const dataA = parseDataBR(a.data);
+                const dataB = parseDataBR(b.data);
+                return dataB - dataA;
+            });
 
             document.getElementById('pdv-grid').innerHTML = prods.filter(p => p.qtd > 0).map(p => `
                 <div class="btn-prod" onclick="addCar(${p.id}, '${p.sigla}', ${p.preco})">
@@ -438,7 +913,7 @@
                 </tr>
             `).join('');
 
-            document.getElementById('tab-h').innerHTML = histsOrdenados.map(h => `
+            document.getElementById('tab-h').innerHTML = histsFiltrados.map(h => `
                 <tr>
                     <td><small>${h.data}</small><br>${h.tipo}</td>
                     <td>R$ ${h.total.toFixed(2)}</td>
@@ -474,7 +949,8 @@
         function addCar(id, sigla, preco) { carrinho.push({id, sigla, preco}); attResumo(); }
         
         function attResumo() {
-            let t = 0; document.getElementById('lista-car').innerHTML = carrinho.map((c,i)=>{t+=c.preco; return `<div class="item-car"><span>${c.sigla}</span><b>R$ ${c.preco.toFixed(2)} <i class="fas fa-times" onclick="carrinho.splice(${i},1);attResumo()" style="color:red; margin-left:10px"></i></b></div>`}).join('');
+            let t = 0; 
+            document.getElementById('lista-car').innerHTML = carrinho.map((c,i)=>{t+=c.preco; return `<div class="item-car"><span>${c.sigla}</span><b>R$ ${c.preco.toFixed(2)} <i class="fas fa-times" onclick="carrinho.splice(${i},1);attResumo()" style="color:red; margin-left:10px"></i></b></div>`}).join('');
             document.getElementById('tot-car').innerText = `R$ ${t.toFixed(2)}`;
         }
 
@@ -579,6 +1055,7 @@
                 
                 await deletar('historico', id);
                 fecharModal('modal-historico');
+                renderizarTudo();
             }
         }
 
@@ -630,7 +1107,6 @@
             clienteFichaId = id;
             const p = await buscar("pessoas", id);
             const hists = await listar("historico");
-            // ORDENAÇÃO CRONOLÓGICA (ANTIGA -> RECENTE) PARA A FICHA
             const consumos = hists.filter(h => h.clienteId === id).sort((a, b) => parseDataBR(a.data) - parseDataBR(b.data));
             const saldoReal = -p.divida;
             const statusLabel = saldoReal < 0 ? "DÉBITO TOTAL" : "CRÉDITO TOTAL";
@@ -748,28 +1224,37 @@
             if(id) {
                 await deletar('pessoas', id);
                 fecharModal('modal-pessoa');
+                renderizarTudo();
             }
         }
 
         function abrirModalProd(id = null) {
             document.getElementById('modal-prod').style.display='block';
-            if(id) buscar("estoque", id).then(p => {
-                document.getElementById('edit-prod-id').value = p.id;
-                document.getElementById('prod-nome').value = p.nome;
-                document.getElementById('prod-sigla').value = p.sigla;
-                document.getElementById('prod-preco').value = p.preco;
-                document.getElementById('prod-qtd').value = p.qtd;
-            });
-            else { document.getElementById('edit-prod-id').value=""; document.getElementById('modal-prod').querySelectorAll('input').forEach(i=>i.value=""); }
+            if(id) {
+                buscar("estoque", id).then(p => {
+                    document.getElementById('edit-prod-id').value = p.id;
+                    document.getElementById('prod-nome').value = p.nome;
+                    document.getElementById('prod-sigla').value = p.sigla;
+                    document.getElementById('prod-preco').value = p.preco;
+                    document.getElementById('prod-qtd').value = p.qtd;
+                });
+            } else { 
+                document.getElementById('edit-prod-id').value=""; 
+                document.getElementById('modal-prod').querySelectorAll('input').forEach(i=>i.value=""); 
+            }
         }
 
         function fecharModal(m) { document.getElementById(m).style.display = 'none'; }
-        function listar(t) { return new Promise(r => db.transaction(t,"readonly").objectStore(t).getAll().onsuccess=e=>r(e.target.result)); }
-        function buscar(t, id) { return new Promise(r => db.transaction(t,"readonly").objectStore(t).get(id).onsuccess=e=>r(e.target.result)); }
-        function salvar(t, o) { return new Promise(r => db.transaction(t,"readwrite").objectStore(t).put(o).onsuccess=()=>r()); }
-        function limpar(t) { return new Promise(r => db.transaction(t,"readwrite").objectStore(t).clear().onsuccess=()=>r()); }
+        function listar(t) { return new Promise((resolve, reject) => { const tx = db.transaction(t,"readonly"); tx.objectStore(t).getAll().onsuccess=e=>resolve(e.target.result); tx.onerror=e=>reject(e); }); }
+        function buscar(t, id) { return new Promise((resolve, reject) => { const tx = db.transaction(t,"readonly"); tx.objectStore(t).get(id).onsuccess=e=>resolve(e.target.result); tx.onerror=e=>reject(e); }); }
+        function salvar(t, o) { return new Promise((resolve, reject) => { const tx = db.transaction(t,"readwrite"); tx.objectStore(t).put(o).onsuccess=()=>resolve(); tx.onerror=e=>reject(e); }); }
+        function limpar(t) { return new Promise((resolve, reject) => { const tx = db.transaction(t,"readwrite"); tx.objectStore(t).clear().onsuccess=()=>resolve(); tx.onerror=e=>reject(e); }); }
         
-        async function deletar(t, id) { db.transaction(t,"readwrite").objectStore(t).delete(id).onsuccess=()=>renderizarTudo(); }
+        async function deletar(t, id) { 
+            const tx = db.transaction(t,"readwrite");
+            tx.objectStore(t).delete(id);
+            tx.oncomplete = () => renderizarTudo();
+        }
         function toggleBanField() { document.getElementById('p-ban-box').style.display = document.getElementById('p-tipo').value === 'ALUNO' ? 'block' : 'none'; }
     </script>
 </body>
