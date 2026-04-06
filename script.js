@@ -15,25 +15,24 @@ function verificarLogin() {
         // Salva que você logou para não pedir senha de novo ao atualizar (F5)
         sessionStorage.setItem('autenticado', 'true');
         
-async function renderizarTudo() {
-    // 1. O Supabase busca os dados e já traz em formato JSON
-    const { data, error } = await _supabase
-        .from('estoque')
-        .select('*');
+async function carregarDadosAutomatico() {
+    const urlJSON = "SUA_URL_PUBLICA_DO_SUPABASE_AQUI";
 
-    if (error) {
-        console.error('Erro ao buscar dados:', error);
-        return;
-    }
-
-    // 2. O 'data' já é o seu JSON. 
-    // Basta enviar para a função que você já tem para mostrar na tela.
-    if (data) {
-        console.log("JSON recebido do Supabase:", data);
-        // Chame aqui a sua função existente, por exemplo:
-        // exibirProdutos(data); 
+    try {
+        const resposta = await fetch(urlJSON);
+        const dadosCompletos = await resposta.json();
+        
+        // Agora o 'dadosCompletos' tem TUDO: estoque, pessoas, vendas...
+        console.log("Banco de dados carregado com sucesso!", dadosCompletos);
+        
+        // Chama a sua função que já existe
+        renderizarTudo(dadosCompletos); 
+    } catch (erro) {
+        console.error("Erro ao carregar o JSON da nuvem:", erro);
     }
 }
+
+// Chame essa função logo após o login ou no window.onload}
 }
 
     // 3. Se funcionou, ele manda os dados para a função que desenha na tela
