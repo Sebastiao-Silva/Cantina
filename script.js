@@ -6,7 +6,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // Inicializa o cliente do Supabase
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Caminho do seu arquivo JSON no Storage
+// Caminho do seu arquivo JSON no Storage (Mantido para compatibilidade de backup)
 const BUCKET_NAME = 'BearSnack';
 const FILE_NAME = 'backup_bear (5).json';
 const URL_JSON_SUPABASE = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${FILE_NAME}`;
@@ -48,7 +48,7 @@ async function verificarLogin() {
             // Salva a sessão para não pedir senha no F5
             sessionStorage.setItem('autenticado', 'true');
 
-            // Carrega os dados do arquivo JSON
+            // Carrega os dados direto das tabelas do banco
             await carregarDadosDaNuvem();
             
         } else {
@@ -64,40 +64,45 @@ async function verificarLogin() {
     }
 }
 
-// --- 2. CARREGAR JSON DO STORAGE (IMPORTAR) ---
+// --- 2. CARREGAR DADOS DAS TABELAS (CONEXÃO VIVA) ---
 async function carregarDadosDaNuvem() {
     try {
-        console.log("Baixando banco de dados do Storage...");
-        // Adicionamos um timestamp para evitar que o navegador use uma versão antiga (cache)
-        const resposta = await fetch(`${URL_JSON_SUPABASE}?t=${new Date().getTime()}`);
-        
-        if (!resposta.ok) throw new Error("Arquivo JSON não encontrado no Storage.");
+        console.log("Sincronizando com as tabelas do Supabase...");
 
-        const dadosCompletos = await resposta.json();
+        // Busca todas as tabelas em paralelo para maior velocidade
+        const [resEstoque, resPessoas, resHistorico] = await Promise.all([
+            _supabase.from('estoque').select('*').order('nome', { ascending: true }),
+            _supabase.from('pessoas').select('*').order('nome', { ascending: true }),
+            _supabase.from('historico').select('*').order('id', { ascending: false })
+        ]);
+
+        if (resEstoque.error) throw resEstoque.error;
+        if (resPessoas.error) throw resPessoas.error;
+        if (resHistorico.error) throw resHistorico.error;
+
+        // Atualiza a variável global com os dados reais do banco
+        db_sessao.estoque = resEstoque.data || [];
+        db_sessao.pessoas = resPessoas.data || [];
+        db_sessao.historico = resHistorico.data || [];
         
-        // Atualiza a variável global
-        db_sessao = dadosCompletos;
-        
-        console.log("Dados carregados:", db_sessao);
+        console.log("Dados sincronizados do banco:", db_sessao);
         
         renderizarTudo();
 
     } catch (erro) {
-        console.error("Erro ao carregar JSON:", erro);
-        alert("Atenção: O sistema não conseguiu carregar o arquivo de backup da nuvem.");
+        console.error("Erro ao carregar tabelas do banco:", erro);
+        alert("Erro ao sincronizar dados. Verifique a conexão com o banco de dados.");
     }
 }
 
-// --- 3. SALVAR JSON NO STORAGE (EXPORTAR/SOBRESCREVER) ---
+// --- 3. SALVAR BACKUP NO STORAGE (OPCIONAL/SEGURANÇA) ---
 async function salvarDadosNaNuvem() {
     try {
-        console.log("Salvando alterações na nuvem...");
+        console.log("Gerando backup no Storage...");
         
-        // Converte o objeto global de volta para texto JSON
         const jsonString = JSON.stringify(db_sessao);
         const blob = new Blob([jsonString], { type: 'application/json' });
 
-        // Faz o upload para o Storage com 'upsert: true' para substituir o arquivo antigo
         const { data, error } = await _supabase.storage
             .from(BUCKET_NAME)
             .upload(FILE_NAME, blob, {
@@ -106,18 +111,19 @@ async function salvarDadosNaNuvem() {
             });
 
         if (error) throw error;
-        console.log("Backup atualizado com sucesso!");
+        console.log("Backup em JSON atualizado no Storage.");
 
     } catch (erro) {
-        console.error("Erro ao salvar na nuvem:", erro);
-        alert("Erro ao sincronizar os dados. As alterações foram feitas apenas localmente.");
+        console.error("Erro ao gerar backup no Storage:", erro);
     }
 }
 
 // --- 4. RENDERIZAÇÃO DA INTERFACE ---
 function renderizarTudo() {
     renderVendas();
-    // Aqui você pode adicionar outras funções de renderização conforme necessário
+    // Funções auxiliares para outras abas (se existirem)
+    if (typeof renderEstoque === "function") renderEstoque();
+    if (typeof renderClientes === "function") renderClientes();
     console.log("Interface atualizada.");
 }
 
@@ -133,7 +139,7 @@ function renderVendas() {
     listaEstoque.innerHTML = db_sessao.estoque.map(item => `
         <tr>
             <td>${item.nome} <br><small style="color:gray">Qtd: ${item.qtd} | ${item.sigla || ''}</small></td>
-            <td>R$ ${item.preco.toFixed(2)}</td>
+            <td>R$ ${Number(item.preco).toFixed(2)}</td>
             <td><button class="btn btn-primary" onclick="adicionarAoCarrinho(${item.id})">+</button></td>
         </tr>
     `).join('');
@@ -157,10 +163,10 @@ function renderCarrinho() {
 
     let totalCarrinho = 0;
     listaCarrinho.innerHTML = carrinho.map((item, index) => {
-        totalCarrinho += item.preco;
+        totalCarrinho += Number(item.preco);
         return `<tr>
             <td>${item.nome}</td>
-            <td>R$ ${item.preco.toFixed(2)}</td>
+            <td>R$ ${Number(item.preco).toFixed(2)}</td>
             <td><button class="btn btn-danger" onclick="removerDoCarrinho(${index})">x</button></td>
         </tr>`;
     }).join('');
@@ -174,42 +180,56 @@ function removerDoCarrinho(index) {
     renderCarrinho();
 }
 
-// --- 5. FINALIZAR VENDA E SINCRONIZAR ---
+// --- 5. FINALIZAR VENDA E SINCRONIZAR BANCO ---
 async function finalizarVenda() {
     if (carrinho.length === 0) return alert("Carrinho vazio!");
 
-    const totalVenda = carrinho.reduce((a, b) => a + b.preco, 0);
+    const totalVenda = carrinho.reduce((a, b) => a + Number(b.preco), 0);
     const tipoPagamento = document.getElementById('sel-pagamento').value;
     const clienteId = parseInt(document.getElementById('sel-pessoa').value);
 
-    // 1. Atualiza o estoque na memória local
-    for (let itemCarrinho of carrinho) {
-        const produtoNoEstoque = db_sessao.estoque.find(p => p.id === itemCarrinho.id);
-        if (produtoNoEstoque) {
-            produtoNoEstoque.qtd--;
+    try {
+        // 1. Atualiza o estoque no banco (Tabela 'estoque')
+        for (let itemCarrinho of carrinho) {
+            const { data: prod } = await _supabase
+                .from('estoque')
+                .select('qtd')
+                .eq('id', itemCarrinho.id)
+                .single();
+            
+            if (prod) {
+                await _supabase
+                    .from('estoque')
+                    .update({ qtd: prod.qtd - 1 })
+                    .eq('id', itemCarrinho.id);
+            }
         }
+
+        // 2. Registra no histórico do banco (Tabela 'historico')
+        const novaVenda = {
+            data: new Date().toLocaleString('pt-BR'),
+            total: totalVenda,
+            tipo: tipoPagamento,
+            clienteId: clienteId,
+            itens: carrinho.map(c => c.nome).join(', ')
+        };
+
+        await _supabase.from('historico').insert([novaVenda]);
+
+        // 3. Limpa o carrinho e atualiza localmente
+        carrinho = [];
+        alert("Venda Finalizada com Sucesso!");
+        
+        // Recarrega os dados do banco para garantir sincronia
+        await carregarDadosDaNuvem();
+        
+        // Gera um backup em JSON no Storage por segurança
+        salvarDadosNaNuvem();
+
+    } catch (err) {
+        console.error("Erro ao finalizar venda:", err);
+        alert("Erro ao gravar venda no banco de dados.");
     }
-
-    // 2. Registra no histórico global
-    const novaVenda = {
-        data: new Date().toLocaleString('pt-BR'),
-        total: totalVenda,
-        tipo: tipoPagamento,
-        clienteId: clienteId,
-        itens: carrinho.map(c => c.nome).join(', ')
-    };
-
-    if (!db_sessao.historico) db_sessao.historico = [];
-    db_sessao.historico.push(novaVenda);
-
-    // 3. Limpa o carrinho
-    carrinho = [];
-    
-    // 4. Salva o novo estado do JSON na nuvem (Sobrescreve o arquivo)
-    await salvarDadosNaNuvem();
-
-    alert("Venda Finalizada e Nuvem Atualizada!");
-    renderizarTudo();
 }
 
 // --- 6. INICIALIZAÇÃO ---
