@@ -146,6 +146,8 @@
                         <option value="CREDITO">💳 CRÉDITO</option>
                         <option value="FIADO">📝 FIADO (CONTA)</option>
                     </select>
+                    <label style="font-size: 0.7rem; color: var(--accent); margin-left: 5px;">DATA DA VENDA:</label>
+                    <input type="datetime-local" id="venda-data-manual">
                     <textarea id="obs-venda" placeholder="Obs rápida..." rows="1"></textarea>
                     <button class="btn btn-pago" style="width:100%; margin-top:10px; height: 50px;" onclick="finalizarVenda()">FINALIZAR VENDA</button>
                 </div>
@@ -200,7 +202,10 @@
 
             <div id="aba-historico" class="aba">
                 <div class="sticky-top">
-                    <div style="padding:0 10px; display:flex; gap:10px">
+                    <div class="search-container">
+                        <input type="text" id="busca-historico" placeholder="🔍 Buscar no histórico..." onkeyup="renderizarTudo()">
+                    </div>
+                    <div style="padding:10px; display:flex; gap:10px">
                         <button class="btn" style="flex:1; background:#334155; color:white; font-size:0.7rem" onclick="exportarBackup()">EXPORTAR</button>
                         <button class="btn" style="flex:1; background:#334155; color:white; font-size:0.7rem" onclick="document.getElementById('input-backup').click()">IMPORTAR</button>
                         <input type="file" id="input-backup" style="display:none" onchange="importarBackup(event)">
@@ -218,8 +223,13 @@
         <div id="modal-historico" class="overlay">
             <h2>Editar Registro Histórico</h2>
             <input type="hidden" id="edit-h-id">
+            <label style="font-size: 0.7rem; color: var(--accent);">DESCRIÇÃO / TIPO:</label>
             <input type="text" id="h-tipo" placeholder="DESCRIÇÃO / TIPO">
+            <label style="font-size: 0.7rem; color: var(--accent);">VALOR TOTAL:</label>
             <input type="number" id="h-total" placeholder="VALOR TOTAL" step="0.01">
+            <label style="font-size: 0.7rem; color: var(--accent);">DATA/HORA DO REGISTRO:</label>
+            <input type="text" id="h-data-edit" placeholder="Ex: 01/01/2024 10:00:00">
+            <label style="font-size: 0.7rem; color: var(--accent);">OBSERVAÇÕES:</label>
             <textarea id="h-obs" placeholder="Observações..." rows="3"></textarea>
             <button class="btn btn-pago" style="width:100%" onclick="salvarHistorico()">SALVAR ALTERAÇÃO</button>
             <button class="btn" style="width:100%; background:var(--danger); color:white; margin-top:10px" onclick="executarDeletarHistorico()">EXCLUIR REGISTRO</button>
@@ -294,9 +304,26 @@
         const SENHA_MESTRA = "1234";
         let filtroBanAtual = 'TODOS';
 
-        // Sons do Sistema
-        const somVenda = new Audio('https://assets.mixkit.co/active_storage/sfx/2017/2017-preview.mp3'); // Moedas/Cash
-        const somCaixa = new Audio('https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3'); // Gaveta Abrindo
+        const somVenda = new Audio('https://assets.mixkit.co/active_storage/sfx/2017/2017-preview.mp3');
+        const somCaixa = new Audio('https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3');
+
+        // Função Robusta para converter string brasileira DD/MM/AAAA HH:MM:SS para Date real
+        function parseDataBR(str) {
+            if(!str) return new Date(0);
+            try {
+                const parts = str.split(' ');
+                const dateParts = parts[0].split('/');
+                const timeParts = parts[1] ? parts[1].split(':') : ["00", "00", "00"];
+                // New Date(ano, mes-1, dia, hora, min, seg)
+                return new Date(dateParts[2], dateParts[1] - 1, dateParts[0], timeParts[0], timeParts[1], timeParts[2] || 0);
+            } catch(e) { return new Date(0); }
+        }
+
+        function atualizarDataAtualPDV() {
+            const agora = new Date();
+            agora.setMinutes(agora.getMinutes() - agora.getTimezoneOffset());
+            document.getElementById('venda-data-manual').value = agora.toISOString().slice(0, 16);
+        }
 
         function verificarLogin() {
             const senhaDigitada = document.getElementById('senha-acesso').value;
@@ -304,6 +331,7 @@
                 document.getElementById('tela-login').style.display = 'none';
                 document.getElementById('main-app').style.display = 'block';
                 sessionStorage.setItem('autenticado', 'true');
+                atualizarDataAtualPDV();
                 renderizarTudo();
             } else {
                 document.getElementById('erro-login').style.display = 'block';
@@ -314,6 +342,7 @@
         if(sessionStorage.getItem('autenticado') === 'true') {
             document.getElementById('tela-login').style.display = 'none';
             document.getElementById('main-app').style.display = 'block';
+            window.onload = () => { atualizarDataAtualPDV(); renderizarTudo(); };
         }
 
         let db;
@@ -338,10 +367,10 @@
             el.classList.add('active');
             window.scrollTo(0, 0);
             
-            // Tocar som de caixa ao entrar na tela de vendas
             if(aba === 'vendas') {
                 somCaixa.currentTime = 0;
                 somCaixa.play().catch(e => console.log("Interação necessária para som"));
+                atualizarDataAtualPDV();
             }
             
             renderizarTudo();
@@ -373,6 +402,12 @@
                 return matchesSearch && matchesPeriodo;
             });
 
+            // Filtro e Ordenação do Histórico (MAIS RECENTE NO TOPO - COMO DESEJADO)
+            const termoHist = document.getElementById('busca-historico') ? document.getElementById('busca-historico').value.toUpperCase() : "";
+            const histsOrdenados = hists.filter(h => {
+                return h.tipo.toUpperCase().includes(termoHist) || (h.obs && h.obs.toUpperCase().includes(termoHist)) || h.data.includes(termoHist);
+            }).sort((a, b) => parseDataBR(b.data) - parseDataBR(a.data));
+
             document.getElementById('pdv-grid').innerHTML = prods.filter(p => p.qtd > 0).map(p => `
                 <div class="btn-prod" onclick="addCar(${p.id}, '${p.sigla}', ${p.preco})">
                     <div class="badge">${p.qtd}</div>
@@ -403,9 +438,9 @@
                 </tr>
             `).join('');
 
-            document.getElementById('tab-h').innerHTML = hists.slice().reverse().map(h => `
+            document.getElementById('tab-h').innerHTML = histsOrdenados.map(h => `
                 <tr>
-                    <td><small>${h.data}</small><br>${h.tipo.substring(0, 25)}...</td>
+                    <td><small>${h.data}</small><br>${h.tipo}</td>
                     <td>R$ ${h.total.toFixed(2)}</td>
                     <td style="display:flex; gap:5px">
                         <button class="btn btn-sm" style="background:var(--info); color:white" onclick="abrirEditarHistorico(${h.id})">✎</button>
@@ -448,6 +483,16 @@
             const t = carrinho.reduce((a,b)=>a+b.preco,0);
             const pag = document.getElementById('sel-pagamento').value;
             const pid = parseInt(document.getElementById('sel-pessoa').value);
+            
+            const inputData = document.getElementById('venda-data-manual').value;
+            let dataFinal;
+            if(inputData) {
+                const d = new Date(inputData);
+                dataFinal = d.toLocaleString('pt-BR');
+            } else {
+                dataFinal = new Date().toLocaleString('pt-BR');
+            }
+
             const p = pid !== 0 ? await buscar("pessoas", pid) : {nome: "AVULSO", divida: 0};
             if(pag === 'FIADO' && pid === 0) return alert("Selecione um cliente para fiado!");
             for(let it of carrinho) {
@@ -456,7 +501,7 @@
             }
             if(pag === 'FIADO') { p.divida += t; await salvar("pessoas", p); }
             await salvar("historico", {
-                data: new Date().toLocaleString(),
+                data: dataFinal,
                 total: t,
                 tipo: `${pag}: ${p.nome} (${carrinho.map(c=>c.sigla).join(',')})`,
                 clienteId: pid,
@@ -466,7 +511,11 @@
             somVenda.currentTime = 0;
             somVenda.play().catch(e => console.log("Erro som"));
             
-            carrinho = []; document.getElementById('obs-venda').value=""; renderizarTudo(); alert("Venda Finalizada!");
+            carrinho = []; 
+            document.getElementById('obs-venda').value=""; 
+            atualizarDataAtualPDV();
+            renderizarTudo(); 
+            alert("Venda Finalizada!");
         }
 
         async function abrirEditarHistorico(id) {
@@ -474,6 +523,7 @@
             document.getElementById('edit-h-id').value = h.id;
             document.getElementById('h-tipo').value = h.tipo;
             document.getElementById('h-total').value = h.total;
+            document.getElementById('h-data-edit').value = h.data;
             document.getElementById('h-obs').value = h.obs || "";
             document.getElementById('modal-historico').style.display = 'block';
         }
@@ -481,6 +531,7 @@
         async function salvarHistorico() {
             const id = parseInt(document.getElementById('edit-h-id').value);
             const novoTotal = parseFloat(document.getElementById('h-total').value);
+            const novaData = document.getElementById('h-data-edit').value;
             const h = await buscar("historico", id);
             
             if(h.clienteId && (h.tipo.includes("FIADO") || h.tipo.includes("BANDEJA"))) {
@@ -501,6 +552,7 @@
 
             h.tipo = document.getElementById('h-tipo').value;
             h.total = novoTotal;
+            h.data = novaData;
             h.obs = document.getElementById('h-obs').value;
             await salvar("historico", h);
             fecharModal('modal-historico'); renderizarTudo();
@@ -533,7 +585,6 @@
         async function abrirCobranca(id) {
             clienteFichaId = id;
             const p = await buscar("pessoas", id);
-            // Invertendo lógica visual: divida positiva vira saldo negativo
             const saldoReal = -p.divida;
             const statusDivida = saldoReal < 0 ? "Em Débito" : "Crédito";
             const corDivida = saldoReal < 0 ? "var(--danger)" : "var(--success)";
@@ -560,7 +611,7 @@
             
             await salvar("pessoas", p);
             await salvar("historico", { 
-                data: new Date().toLocaleString(), 
+                data: new Date().toLocaleString('pt-BR'), 
                 total: v, 
                 tipo: `${tipo}: ${p.nome}`, 
                 clienteId: p.id, 
@@ -579,12 +630,13 @@
             clienteFichaId = id;
             const p = await buscar("pessoas", id);
             const hists = await listar("historico");
-            const consumos = hists.filter(h => h.clienteId === id);
+            // ORDENAÇÃO CRONOLÓGICA (ANTIGA -> RECENTE) PARA A FICHA
+            const consumos = hists.filter(h => h.clienteId === id).sort((a, b) => parseDataBR(a.data) - parseDataBR(b.data));
             const saldoReal = -p.divida;
             const statusLabel = saldoReal < 0 ? "DÉBITO TOTAL" : "CRÉDITO TOTAL";
             
             document.getElementById('extrato-topo').innerHTML = `<h2>BEAR SNACK</h2><b>FICHA DE: ${p.nome}</b><br>Saldo: R$ ${saldoReal.toFixed(2)}`;
-            document.getElementById('extrato-lista').innerHTML = consumos.map(c => `<tr><td>${c.data.split(',')[0]}</td><td>${c.tipo.split(':')[0]}</td><td align="right">R$ ${c.total.toFixed(2)}</td></tr>`).join('');
+            document.getElementById('extrato-lista').innerHTML = consumos.map(c => `<tr><td>${c.data.split(' ')[0]}</td><td>${c.tipo.split(':')[0]}</td><td align="right">R$ ${c.total.toFixed(2)}</td></tr>`).join('');
             document.getElementById('extrato-total').innerText = `${statusLabel}: R$ ${Math.abs(saldoReal).toFixed(2)}`;
             document.getElementById('modal-extrato').style.display = 'block';
         }
@@ -592,12 +644,12 @@
         async function enviarExtratoWpp() {
             const p = await buscar("pessoas", clienteFichaId);
             const hists = await listar("historico");
-            const consumos = hists.filter(h => h.clienteId === p.id);
+            const consumos = hists.filter(h => h.clienteId === p.id).sort((a, b) => parseDataBR(a.data) - parseDataBR(b.data));
             const saldoReal = -p.divida;
             const statusMsg = saldoReal < 0 ? "*DÉBITO ATUAL*" : "*CRÉDITO DISPONÍVEL*";
             
             let msg = `*BEAR SNACK - EXTRATO DE CONSUMO*\n*Cliente:* ${p.nome}\n\n`;
-            consumos.forEach(c => { msg += `• ${c.data.split(',')[0]} - ${c.tipo.split(':')[0]}: R$ ${c.total.toFixed(2)}\n`; });
+            consumos.forEach(c => { msg += `• ${c.data.split(' ')[0]} - ${c.tipo.split(':')[0]}: R$ ${c.total.toFixed(2)}\n`; });
             msg += `\n${statusMsg}: R$ ${Math.abs(saldoReal).toFixed(2)}`;
             window.open(`https://wa.me/${p.tel}?text=${encodeURIComponent(msg)}`, '_blank');
         }
@@ -610,7 +662,7 @@
             for(let c of selec) {
                 const p = await buscar("pessoas", parseInt(c.dataset.id));
                 p.divida += valor; await salvar("pessoas", p);
-                await salvar("historico", { data: new Date().toLocaleString(), total: valor, tipo: `BANDEJA: ${p.nome} (${prato})`, clienteId: p.id });
+                await salvar("historico", { data: new Date().toLocaleString('pt-BR'), total: valor, tipo: `BANDEJA: ${p.nome} (${prato})`, clienteId: p.id });
             }
             somVenda.currentTime = 0;
             somVenda.play().catch(e => console.log("Erro som"));
